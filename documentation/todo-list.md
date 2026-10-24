@@ -10,6 +10,7 @@ Discuss new entries and milestone changes before recording them here.
 
 ## Milestones
 
+- [ ] Complete and validate the project setup.
 - [ ] Build a functional frontend grid using mock data.
 - [ ] Use the frontend prototype to define the backend interfaces.
 - [ ] Implement the first backend endpoints.
@@ -17,3 +18,5 @@ Discuss new entries and milestone changes before recording them here.
 - [ ] Iterate on features until an agreed MVP is reached.
 
 ## Backlog
+
+- [ ] Separate static checks from test execution in Make targets.
