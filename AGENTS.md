@@ -7,10 +7,18 @@
 - Consider repository-wide effects while keeping component-specific work within
   the relevant component directory.
 - Run backend tools from `backend/` and Flutter/Dart tools from `frontend/`.
+- Use the root Makefile as the primary entry point for recurring repository
+  operations, including operations that apply to only one component. Invoke all
+  Makefile targets from the repository root; component-specific targets must
+  change into `backend/` or `frontend/` internally.
+- Use direct commands inside component directories only for diagnostics,
+  exceptional operations, or work that does not yet have an approved Makefile
+  target. Discuss the name and responsibility of a recurring command before
+  adding its target.
 - Present user-facing commands as executable from the repository root. When a
   command must run in a component directory, show how to enter that directory
   and return to the root afterward.
-- Prefer root Makefile targets for workflows involving multiple components.
+- Prefer root Makefile targets whenever an appropriate target exists.
 
 ## Workflow
 

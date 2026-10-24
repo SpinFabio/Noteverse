@@ -1,3 +1,5 @@
+# Repository command entry point. Invoke all targets from the repository root.
+# Component-specific targets change into their component directory internally.
 SHELL := /bin/bash
 .DEFAULT_GOAL := help
 
