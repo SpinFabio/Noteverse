@@ -1,63 +1,23 @@
-# Start Noteverse
+# Noteverse
 
-Prerequisites: Docker with Compose, Python 3.12, uv, Flutter stable, Chrome,
-GNU Make, and Bash 4.3 or later.
+Noteverse is an early-stage project for making personal notes easy to collect,
+organize, explore, and expand through a visually engaging knowledge graph.
 
-From the project root, create the environment file if it does not exist:
+Notes remain Markdown files and can be stored on a self-hosted Noteverse server,
+either on the user's computer or on another machine. A multiplatform client will
+let users access and manage those notes across devices.
 
-```bash
-cp .env.example .env
-```
+Noteverse will ingest the Markdown files and progressively represent their links
+in Neo4j. The resulting graph is intended to make connected notes quick to
+understand, arrange, navigate, and extend. Responsiveness across devices and as
+the graph grows is a central product goal.
 
-Start Neo4j in Docker and the backend and frontend locally:
+The project currently provides the initial backend, frontend, Neo4j, and
+development-environment scaffold. The note-management and graph-exploration
+features are not implemented yet.
 
-```bash
-make dev-all-up
-```
+## Documentation
 
-Open http://localhost:3000. Press Ctrl+C to stop the local frontend and backend.
-Neo4j remains running. To stop it:
-
-```bash
-make services-down
-```
-
-## Start each component separately
-
-Start Neo4j:
-
-```bash
-make services-up
-```
-
-In a second terminal, start the backend with reload:
-
-```bash
-make be-up
-```
-
-In a third terminal, start Flutter web:
-
-```bash
-make fe-up
-```
-
-The backend reads the root `.env`, including `BACKEND_PORT` and the Neo4j credentials.
-If you change `BACKEND_PORT`, pass the matching URL when starting the frontend:
-
-```bash
-make fe-up API_BASE_URL=http://localhost:8001
-```
-
-To use a different frontend port, update `CORS_ORIGINS` in `.env` to allow its origin,
-then run:
-
-```bash
-make fe-up FE_PORT=3001
-```
-
-Show available commands:
-
-```bash
-make help
-```
+- [Functional requirements](documentation/requirements.md)
+- [User flows](documentation/user-flows.md)
+- [Getting started](documentation/getting-started.md)
