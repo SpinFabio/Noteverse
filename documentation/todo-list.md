@@ -1,0 +1,19 @@
+# To-do list
+
+Use this file to track the agreed direction of the project:
+
+- **Milestones** are the ordered, high-level outcomes leading toward the MVP.
+- **Backlog** contains specific activities discovered during development but not
+  yet assigned to a milestone.
+
+Discuss new entries and milestone changes before recording them here.
+
+## Milestones
+
+- [ ] Build a functional frontend grid using mock data.
+- [ ] Use the frontend prototype to define the backend interfaces.
+- [ ] Implement the first backend endpoints.
+- [ ] Add integration tests.
+- [ ] Iterate on features until an agreed MVP is reached.
+
+## Backlog

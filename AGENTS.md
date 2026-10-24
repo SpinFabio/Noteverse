@@ -15,6 +15,10 @@
   iteratively before proceeding.
 - Create a commit only after the user has validated the implementation and
   explicitly requested the commit.
+- Track the agreed project direction in `documentation/todo-list.md`. Its
+  milestones are ordered, high-level outcomes; its backlog contains specific
+  activities discovered during development but not yet assigned to a milestone.
+  Discuss additions and milestone changes before recording them.
 
 ## Communication
 

@@ -21,3 +21,4 @@ features are not implemented yet.
 - [Functional requirements](documentation/requirements.md)
 - [User flows](documentation/user-flows.md)
 - [Getting started](documentation/getting-started.md)
+- [To-do list](documentation/todo-list.md)
