@@ -18,8 +18,9 @@ From the project root, create the environment file if it does not exist:
 cp .env.example .env
 ```
 
-The backend reads the root `.env`, including `BACKEND_PORT` and the Neo4j
-credentials.
+The backend and the root Makefile read `.env`. Frontend development settings
+include `FE_HOST`, `FE_PORT`, and `API_BASE_URL`; backend settings include
+`BACKEND_PORT` and the Neo4j credentials.
 
 ## Start the development environment
 
@@ -52,26 +53,47 @@ In a second terminal, start the backend with reload enabled:
 make be-up
 ```
 
-In a third terminal, start the Flutter web client:
+In a third terminal, start the Flutter web client in development mode:
 
 ```bash
 make fe-up
 ```
 
-## Change local ports
-
-If `BACKEND_PORT` is changed, pass the matching URL when starting the frontend:
-
-```bash
-make fe-up API_BASE_URL=http://localhost:8001
-```
-
-To use a different frontend port, update `CORS_ORIGINS` in `.env` to allow its
-origin, then run:
+`fe-up` is an alias for the more explicit `fe-dev` target. Development mode
+supports hot reload. Use profile mode to investigate rendering performance:
 
 ```bash
-make fe-up FE_PORT=3001
+make fe-profile
 ```
+
+Use release mode to validate the optimized user experience without profiling
+overhead:
+
+```bash
+make fe-prod
+```
+
+Run only one frontend mode at a time because all three use `FE_PORT`.
+
+## Change local addresses
+
+Edit `.env` to change the frontend development server address or the backend URL:
+
+```dotenv
+FE_HOST=127.0.0.1
+FE_PORT=3000
+API_BASE_URL=http://localhost:8000
+```
+
+Values can also be overridden for a single command:
+
+```bash
+make fe-up FE_HOST=127.0.0.1 FE_PORT=3001 API_BASE_URL=http://localhost:8001
+```
+
+When the frontend origin changes, update `CORS_ORIGINS` in `.env` to allow it.
+These commands start local development or validation servers. A deployment uses
+a release build and a separate hosting workflow.
 
 ## List available commands
 
