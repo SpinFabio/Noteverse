@@ -1,5 +1,17 @@
 # Collaboration rules
 
+## Repository structure
+
+- Noteverse is a monorepo containing the backend, frontend, documentation, and
+  root-level development orchestration.
+- Consider repository-wide effects while keeping component-specific work within
+  the relevant component directory.
+- Run backend tools from `backend/` and Flutter/Dart tools from `frontend/`.
+- Present user-facing commands as executable from the repository root. When a
+  command must run in a component directory, show how to enter that directory
+  and return to the root afterward.
+- Prefer root Makefile targets for workflows involving multiple components.
+
 ## Workflow
 
 - Start with an iterative discussion of the idea and its requirements.
@@ -32,6 +44,15 @@
   resolve it with the user. Do not choose a resolution silently.
 - When a conflict is first identified, report it explicitly in the conversation
   before recording it with a project tag.
+- Assume commands given to the user are run from the project root. If a command
+  must run in a component directory, show the command to enter that directory
+  and the command to return to the project root. State the shell when the syntax
+  is shell-specific. Prefer root Makefile targets when an appropriate target
+  already exists.
+- When discussing Dart or Flutter, do not assume prior familiarity. Explain the
+  relevant framework concepts and idiomatic approach, distinguish deterministic
+  corrections from design decisions, and discuss meaningful tradeoffs before
+  making non-trivial choices.
 
 ## Documentation
 
