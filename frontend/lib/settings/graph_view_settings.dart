@@ -1,11 +1,15 @@
 import 'package:flutter/material.dart';
 
+import '../theme/noteverse_colors.dart';
+
 /// User-configurable presentation settings for the graph viewport.
 class GraphViewSettings {
   const GraphViewSettings({required this.backgroundColor});
 
   /// Default settings used when no valid persisted value is available.
-  static const defaults = GraphViewSettings(backgroundColor: Color(0xFFC8C8C8));
+  static const defaults = GraphViewSettings(
+    backgroundColor: NoteversePalette.graphBackground,
+  );
 
   static const _schemaVersion = 1;
 

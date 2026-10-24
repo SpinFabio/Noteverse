@@ -106,6 +106,17 @@ the tag when its subject has been resolved.
 - Treat running frontend and backend images together in Docker Compose as a
   separate workflow requiring its own approved plan.
 
+## Frontend design system
+
+- Define reusable frontend colors in `frontend/lib/theme/`; do not duplicate
+  color literals in widgets, painters, or feature models.
+- Use Flutter theme roles for application colors and pass resolved theme colors
+  into low-level renderers. Runtime colors selected by the user are overrides,
+  not theme tokens.
+- Use theme tokens as the defaults for persisted appearance settings. Follow
+  the additional rules in `frontend/lib/theme/AGENTS.md` when changing the
+  palette or theme structure.
+
 ## Tests
 
 - Keep backend tests in `backend/tests/` and frontend tests in `frontend/test/`

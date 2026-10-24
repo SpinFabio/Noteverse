@@ -14,25 +14,30 @@ class HexGridPainter extends CustomPainter {
     required this.geometry,
     required this.backgroundColor,
     required this.gridColor,
+    required this.originColor,
   }) : _backgroundPaint = Paint()..color = backgroundColor,
        _gridPaint = Paint()
          ..color = gridColor
-         ..strokeWidth = 1,
-       _originPaint = Paint()..color = Colors.red,
+         ..strokeCap = StrokeCap.round,
+       _originPaint = Paint()..color = originColor,
        super(repaint: camera);
 
   final CanvasCamera camera;
   final HexGridGeometry geometry;
   final Color backgroundColor;
   final Color gridColor;
+  final Color originColor;
   final Paint _backgroundPaint;
   final Paint _gridPaint;
   final Paint _originPaint;
 
-  Float32List _lineBuffer = Float32List(0);
+  Float32List _pointBuffer = Float32List(0);
 
   static const _visibleMargin = 2;
   static const _originRadius = 3.0;
+  static const _dotDiameter = 2.0;
+  static const _minimumDotDiameter = 0.5;
+  static const _dotSpacing = 8.0;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -53,9 +58,14 @@ class HexGridPainter extends CustomPainter {
 
     final screenRadius = geometry.radius * camera.scale;
     final screenHalfHeight = geometry.height * camera.scale / 2;
+    _gridPaint.strokeWidth = (_dotDiameter * scale).clamp(
+      _minimumDotDiameter,
+      _dotDiameter,
+    );
+    final dotsPerEdge = math.max(2, (screenRadius / _dotSpacing).ceil());
     final candidateCount = (maxQ - minQ + 1) * (maxR - minR + 1);
-    _ensureLineCapacity(candidateCount * 12);
-    var lineIndex = 0;
+    _ensurePointCapacity(candidateCount * 3 * dotsPerEdge * 2);
+    var pointIndex = 0;
 
     for (var q = minQ; q <= maxQ; q++) {
       final centerX = originX + geometry.centerXOf(q) * scale;
@@ -78,27 +88,37 @@ class HexGridPainter extends CustomPainter {
 
         // Three consecutive sides are sufficient: adjacent cells own the
         // opposite sides, so every shared grid edge is submitted exactly once.
-        _lineBuffer[lineIndex++] = right;
-        _lineBuffer[lineIndex++] = centerY;
-        _lineBuffer[lineIndex++] = halfRight;
-        _lineBuffer[lineIndex++] = lower;
-
-        _lineBuffer[lineIndex++] = halfRight;
-        _lineBuffer[lineIndex++] = lower;
-        _lineBuffer[lineIndex++] = halfLeft;
-        _lineBuffer[lineIndex++] = lower;
-
-        _lineBuffer[lineIndex++] = halfLeft;
-        _lineBuffer[lineIndex++] = lower;
-        _lineBuffer[lineIndex++] = left;
-        _lineBuffer[lineIndex++] = centerY;
+        pointIndex = _writeDottedEdge(
+          pointIndex,
+          right,
+          centerY,
+          halfRight,
+          lower,
+          dotsPerEdge,
+        );
+        pointIndex = _writeDottedEdge(
+          pointIndex,
+          halfRight,
+          lower,
+          halfLeft,
+          lower,
+          dotsPerEdge,
+        );
+        pointIndex = _writeDottedEdge(
+          pointIndex,
+          halfLeft,
+          lower,
+          left,
+          centerY,
+          dotsPerEdge,
+        );
       }
     }
 
-    if (lineIndex > 0) {
+    if (pointIndex > 0) {
       canvas.drawRawPoints(
-        PointMode.lines,
-        Float32List.sublistView(_lineBuffer, 0, lineIndex),
+        PointMode.points,
+        Float32List.sublistView(_pointBuffer, 0, pointIndex),
         _gridPaint,
       );
     }
@@ -110,16 +130,33 @@ class HexGridPainter extends CustomPainter {
     );
   }
 
-  void _ensureLineCapacity(int requiredLength) {
-    if (_lineBuffer.length >= requiredLength) {
+  int _writeDottedEdge(
+    int startIndex,
+    double startX,
+    double startY,
+    double endX,
+    double endY,
+    int dotCount,
+  ) {
+    var index = startIndex;
+    for (var dot = 0; dot < dotCount; dot++) {
+      final progress = dot / dotCount;
+      _pointBuffer[index++] = startX + (endX - startX) * progress;
+      _pointBuffer[index++] = startY + (endY - startY) * progress;
+    }
+    return index;
+  }
+
+  void _ensurePointCapacity(int requiredLength) {
+    if (_pointBuffer.length >= requiredLength) {
       return;
     }
 
-    var capacity = math.max(1024, _lineBuffer.length);
+    var capacity = math.max(1024, _pointBuffer.length);
     while (capacity < requiredLength) {
       capacity *= 2;
     }
-    _lineBuffer = Float32List(capacity);
+    _pointBuffer = Float32List(capacity);
   }
 
   @override
@@ -127,5 +164,6 @@ class HexGridPainter extends CustomPainter {
       oldDelegate.camera != camera ||
       oldDelegate.geometry.radius != geometry.radius ||
       oldDelegate.backgroundColor != backgroundColor ||
-      oldDelegate.gridColor != gridColor;
+      oldDelegate.gridColor != gridColor ||
+      oldDelegate.originColor != originColor;
 }

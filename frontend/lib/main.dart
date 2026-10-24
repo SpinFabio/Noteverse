@@ -8,6 +8,8 @@ import 'data/settings/graph_view_settings_store.dart';
 import 'hex_grid_geometry.dart';
 import 'hex_grid_painter.dart';
 import 'settings/graph_view_settings.dart';
+import 'theme/noteverse_colors.dart';
+import 'theme/noteverse_theme.dart';
 import 'widgets/canvas_controls.dart';
 import 'widgets/graph_view_settings_dialog.dart';
 
@@ -38,7 +40,7 @@ class NoteverseApp extends StatelessWidget {
   Widget build(BuildContext context) => MaterialApp(
     title: 'Noteverse',
     debugShowCheckedModeBanner: false,
-    theme: ThemeData(colorSchemeSeed: Colors.indigo),
+    theme: NoteverseTheme.dark,
     home: InfiniteCanvasPage(
       initialSettings: initialSettings,
       settingsStore: settingsStore,
@@ -62,7 +64,6 @@ class InfiniteCanvasPage extends StatefulWidget {
 }
 
 class _InfiniteCanvasPageState extends State<InfiniteCanvasPage> {
-  static const _gridColor = Color(0xFFB8B8B8);
   static const _geometry = HexGridGeometry(radius: 40);
 
   final CanvasCamera _camera = CanvasCamera(minScale: 1 / 3, maxScale: 4);
@@ -140,61 +141,65 @@ class _InfiniteCanvasPageState extends State<InfiniteCanvasPage> {
   }
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-    body: Stack(
-      fit: StackFit.expand,
-      children: [
-        LayoutBuilder(
-          builder: (context, constraints) {
-            final viewportSize = constraints.biggest;
-            return MouseRegion(
-              cursor: SystemMouseCursors.grab,
-              child: Listener(
-                onPointerSignal: (event) {
-                  if (event is PointerScrollEvent) {
-                    _zoomWithWheel(event, viewportSize);
-                  }
-                },
-                child: GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onScaleStart: (details) =>
-                      _startGesture(details, viewportSize),
-                  onScaleUpdate: (details) =>
-                      _updateGesture(details, viewportSize),
-                  child: RepaintBoundary(
-                    child: Semantics(
-                      label: 'Infinite hexagonal graph plane',
-                      child: CustomPaint(
-                        painter: HexGridPainter(
-                          camera: _camera,
-                          geometry: _geometry,
-                          backgroundColor: _settings.backgroundColor,
-                          gridColor: _gridColor,
+  Widget build(BuildContext context) {
+    final colors = NoteverseColors.of(context);
+    return Scaffold(
+      body: Stack(
+        fit: StackFit.expand,
+        children: [
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final viewportSize = constraints.biggest;
+              return MouseRegion(
+                cursor: SystemMouseCursors.grab,
+                child: Listener(
+                  onPointerSignal: (event) {
+                    if (event is PointerScrollEvent) {
+                      _zoomWithWheel(event, viewportSize);
+                    }
+                  },
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onScaleStart: (details) =>
+                        _startGesture(details, viewportSize),
+                    onScaleUpdate: (details) =>
+                        _updateGesture(details, viewportSize),
+                    child: RepaintBoundary(
+                      child: Semantics(
+                        label: 'Infinite hexagonal graph plane',
+                        child: CustomPaint(
+                          painter: HexGridPainter(
+                            camera: _camera,
+                            geometry: _geometry,
+                            backgroundColor: _settings.backgroundColor,
+                            gridColor: colors.graphGridDots,
+                            originColor: colors.graphOrigin,
+                          ),
+                          size: viewportSize,
                         ),
-                        size: viewportSize,
                       ),
                     ),
                   ),
                 ),
-              ),
-            );
-          },
-        ),
-        Positioned(
-          top: 24,
-          left: 24,
-          child: CanvasControls(onOpenSettings: _openSettings),
-        ),
-        Positioned(
-          right: 24,
-          bottom: 24,
-          child: FloatingActionButton.small(
-            onPressed: _camera.reset,
-            tooltip: 'Center on origin',
-            child: const Icon(Icons.center_focus_strong),
+              );
+            },
           ),
-        ),
-      ],
-    ),
-  );
+          Positioned(
+            top: 24,
+            left: 24,
+            child: CanvasControls(onOpenSettings: _openSettings),
+          ),
+          Positioned(
+            right: 24,
+            bottom: 24,
+            child: FloatingActionButton.small(
+              onPressed: _camera.centerOnOrigin,
+              tooltip: 'Center on origin',
+              child: const Icon(Icons.center_focus_strong),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }

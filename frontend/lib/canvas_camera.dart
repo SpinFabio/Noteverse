@@ -63,13 +63,12 @@ class CanvasCamera extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Restores the default zoom and places world coordinate `(0, 0)` at center.
-  void reset() {
-    if (_scale == 1 && _translation == Offset.zero) {
+  /// Places world coordinate `(0, 0)` at center without changing zoom.
+  void centerOnOrigin() {
+    if (_translation == Offset.zero) {
       return;
     }
 
-    _scale = 1;
     _translation = Offset.zero;
     notifyListeners();
   }
