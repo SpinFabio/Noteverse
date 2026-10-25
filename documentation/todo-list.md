@@ -20,3 +20,9 @@ Discuss new entries and milestone changes before recording them here.
 ## Backlog
 
 - [ ] Separate static checks from test execution in Make targets.
+- [ ] Allow force-directed layout to target a selected subgraph.
+- [ ] Persist applied graph coordinates through the backend and Markdown files.
+- [ ] Define how newly imported graphs are positioned relative to existing
+      canvas content.
+- [ ] Support multiple saved views of the same graph.
+- [ ] Optimize force-directed layout for large graphs after profiling it.

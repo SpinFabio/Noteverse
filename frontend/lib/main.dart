@@ -5,22 +5,31 @@ import 'package:flutter/material.dart';
 
 import 'canvas_camera.dart';
 import 'data/settings/graph_view_settings_store.dart';
+import 'graph/data/graph_asset_loader.dart';
+import 'graph/models/graph_data.dart';
 import 'hex_grid_geometry.dart';
 import 'hex_grid_painter.dart';
 import 'settings/graph_view_settings.dart';
 import 'theme/noteverse_colors.dart';
+import 'theme/noteverse_graph_style.dart';
 import 'theme/noteverse_theme.dart';
 import 'widgets/canvas_controls.dart';
+import 'widgets/canvas_navigation_controls.dart';
+import 'widgets/graph_layout_dialog.dart';
 import 'widgets/graph_view_settings_dialog.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   final settingsStore = SharedPreferencesGraphViewSettingsStore();
   final initialSettings = await settingsStore.load();
+  final graph = await GraphAssetLoader.load(
+    'assets/mock/history_of_computing_graph.json',
+  );
   runApp(
     NoteverseApp(
       initialSettings: initialSettings,
       settingsStore: settingsStore,
+      graph: graph,
     ),
   );
 }
@@ -30,11 +39,13 @@ class NoteverseApp extends StatelessWidget {
   const NoteverseApp({
     required this.initialSettings,
     required this.settingsStore,
+    required this.graph,
     super.key,
   });
 
   final GraphViewSettings initialSettings;
   final GraphViewSettingsStore settingsStore;
+  final GraphData graph;
 
   @override
   Widget build(BuildContext context) => MaterialApp(
@@ -44,6 +55,7 @@ class NoteverseApp extends StatelessWidget {
     home: InfiniteCanvasPage(
       initialSettings: initialSettings,
       settingsStore: settingsStore,
+      graph: graph,
     ),
   );
 }
@@ -53,11 +65,13 @@ class InfiniteCanvasPage extends StatefulWidget {
   const InfiniteCanvasPage({
     required this.initialSettings,
     required this.settingsStore,
+    required this.graph,
     super.key,
   });
 
   final GraphViewSettings initialSettings;
   final GraphViewSettingsStore settingsStore;
+  final GraphData graph;
 
   @override
   State<InfiniteCanvasPage> createState() => _InfiniteCanvasPageState();
@@ -68,6 +82,7 @@ class _InfiniteCanvasPageState extends State<InfiniteCanvasPage> {
 
   final CanvasCamera _camera = CanvasCamera(minScale: 1 / 3, maxScale: 4);
   late GraphViewSettings _settings = widget.initialSettings;
+  late GraphData _graph = widget.graph;
   double _gestureStartScale = 1;
   Offset _gestureAnchorWorld = Offset.zero;
 
@@ -103,6 +118,18 @@ class _InfiniteCanvasPageState extends State<InfiniteCanvasPage> {
     }
   }
 
+  Future<void> _arrangeGraph() async {
+    final arrangedGraph = await showGraphLayoutDialog(
+      context: context,
+      graph: _graph,
+      geometry: _geometry,
+      backgroundColor: _settings.backgroundColor,
+    );
+    if (arrangedGraph != null && mounted) {
+      setState(() => _graph = arrangedGraph);
+    }
+  }
+
   void _startGesture(ScaleStartDetails details, Size viewportSize) {
     _gestureStartScale = _camera.scale;
     _gestureAnchorWorld = _camera.worldFromScreen(
@@ -134,6 +161,16 @@ class _InfiniteCanvasPageState extends State<InfiniteCanvasPage> {
     );
   }
 
+  void _zoomFromCenter(double factor, Size viewportSize) {
+    final focalPoint = viewportSize.center(Offset.zero);
+    _camera.focusOn(
+      anchorWorld: _camera.worldFromScreen(focalPoint, viewportSize),
+      focalPoint: focalPoint,
+      viewportSize: viewportSize,
+      requestedScale: _camera.scale * factor,
+    );
+  }
+
   @override
   void dispose() {
     _camera.dispose();
@@ -143,6 +180,7 @@ class _InfiniteCanvasPageState extends State<InfiniteCanvasPage> {
   @override
   Widget build(BuildContext context) {
     final colors = NoteverseColors.of(context);
+    final viewportSize = MediaQuery.sizeOf(context);
     return Scaffold(
       body: Stack(
         fit: StackFit.expand,
@@ -171,9 +209,15 @@ class _InfiniteCanvasPageState extends State<InfiniteCanvasPage> {
                           painter: HexGridPainter(
                             camera: _camera,
                             geometry: _geometry,
+                            graph: _graph,
                             backgroundColor: _settings.backgroundColor,
-                            gridColor: colors.graphGridDots,
+                            gridColor: colors.graphGridLines,
+                            gridLineWidth: NoteverseGraphStyle.gridLineWidth,
                             originColor: colors.graphOrigin,
+                            nodeSurfaceColor: colors.graphNodeSurface,
+                            nodeOutlineColor: colors.graphNodeOutline,
+                            nodeLabelColor: colors.graphNodeLabel,
+                            edgeColor: colors.graphEdge,
                           ),
                           size: viewportSize,
                         ),
@@ -190,12 +234,22 @@ class _InfiniteCanvasPageState extends State<InfiniteCanvasPage> {
             child: CanvasControls(onOpenSettings: _openSettings),
           ),
           Positioned(
+            left: 24,
+            bottom: 24,
+            child: CanvasNavigationControls(
+              onZoomOut: () => _zoomFromCenter(0.8, viewportSize),
+              onCenter: _camera.centerOnOrigin,
+              onZoomIn: () => _zoomFromCenter(1.25, viewportSize),
+            ),
+          ),
+          Positioned(
             right: 24,
             bottom: 24,
             child: FloatingActionButton.small(
-              onPressed: _camera.centerOnOrigin,
-              tooltip: 'Center on origin',
-              child: const Icon(Icons.center_focus_strong),
+              heroTag: 'arrange-graph',
+              onPressed: _arrangeGraph,
+              tooltip: 'Arrange graph',
+              child: const Icon(Icons.auto_awesome_motion_outlined),
             ),
           ),
         ],

@@ -41,4 +41,26 @@ class HexGridGeometry {
       rAt(worldPosition.dx, worldPosition.dy),
     );
   }
+
+  /// Returns the nearest integer cell to a Cartesian world position.
+  HexCoordinate coordinateAt(Offset worldPosition) {
+    final fractional = fractionalCoordinateAt(worldPosition);
+    var q = fractional.dx.round();
+    var r = fractional.dy.round();
+    var s = (-fractional.dx - fractional.dy).round();
+
+    final qDifference = (q - fractional.dx).abs();
+    final rDifference = (r - fractional.dy).abs();
+    final sDifference = (s + fractional.dx + fractional.dy).abs();
+
+    if (qDifference > rDifference && qDifference > sDifference) {
+      q = -r - s;
+    } else if (rDifference > sDifference) {
+      r = -q - s;
+    } else {
+      s = -q - r;
+    }
+
+    return HexCoordinate(q, r);
+  }
 }

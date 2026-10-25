@@ -60,6 +60,18 @@ flutter:
   # the material Icons class.
   uses-material-design: true
 
+  assets:
+    - assets/mock/history_of_computing_graph.json
+    - assets/fonts/atkinson_hyperlegible_next/OFL.txt
+
+  fonts:
+    - family: Atkinson Hyperlegible Next
+      fonts:
+        - asset: assets/fonts/atkinson_hyperlegible_next/AtkinsonHyperlegibleNext-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/atkinson_hyperlegible_next/AtkinsonHyperlegibleNext-Bold.ttf
+          weight: 700
+
   # To add assets to your application, add an assets section, like this:
   # assets:
   #   - images/a_dot_burr.jpeg

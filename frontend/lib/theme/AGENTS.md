@@ -6,7 +6,7 @@
   `secondary`, `tertiary`, `surface`, `error`, and their matching `on` roles.
   Material 3 `tertiary` is the application accent role.
 - Use `NoteverseColors`, a `ThemeExtension`, for application-specific roles such
-  as graph background, grid dots, graph origin, node, edge, and selection
+  as graph background, grid lines, graph origin, node, edge, and selection
   colors.
 - Keep raw reusable color values in this directory. Widgets must resolve colors
   through `Theme.of(context)`; painters must receive resolved colors from their

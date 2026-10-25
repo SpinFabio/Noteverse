@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'noteverse_colors.dart';
+import 'noteverse_typography.dart';
 
 /// Application themes assembled from the canonical Noteverse color tokens.
 abstract final class NoteverseTheme {
@@ -11,13 +12,16 @@ abstract final class NoteverseTheme {
 
   /// Dark-mode-first theme used by every currently supported target.
   static final ThemeData dark =
-      ThemeData.from(
+      ThemeData(
         colorScheme: _darkColorScheme,
         useMaterial3: true,
+        fontFamily: NoteverseTypography.fontFamily,
       ).copyWith(
-        textTheme: ThemeData.dark().textTheme.apply(
-          bodyColor: NoteversePalette.foreground,
-          displayColor: NoteversePalette.foreground,
+        textTheme: NoteverseTypography.apply(
+          ThemeData.dark().textTheme.apply(
+            bodyColor: NoteversePalette.foreground,
+            displayColor: NoteversePalette.foreground,
+          ),
         ),
         iconTheme: const IconThemeData(color: NoteversePalette.foreground),
         iconButtonTheme: const IconButtonThemeData(
