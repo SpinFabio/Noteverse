@@ -172,7 +172,7 @@ class _GraphLayoutDialogState extends State<GraphLayoutDialog>
       details.localPosition,
       size,
     );
-    final nodeId = _layout.hitTestNode(layoutPosition, 18 / _viewScale);
+    final nodeId = _layout.hitTestNode(layoutPosition);
     if (nodeId == null) {
       _isPanning = true;
       setState(() {});
@@ -906,7 +906,6 @@ class _ForceGraphPainter extends CustomPainter {
        },
        super(repaint: layout);
 
-  static const _nodeRadius = 9.0;
   static const _arrowLength = 6.0;
   static const _arrowHalfWidth = 3.0;
 
@@ -955,18 +954,21 @@ class _ForceGraphPainter extends CustomPainter {
         canvas,
         layout.positionOf(edge.sourceNodeId),
         layout.positionOf(edge.targetNodeId),
+        _radiusOf(edge.sourceNodeId),
+        _radiusOf(edge.targetNodeId),
       );
     }
 
     for (final node in layout.visibleNodes) {
       final center = layout.positionOf(node.id);
-      canvas.drawCircle(center, _nodeRadius, _surfacePaint);
-      canvas.drawCircle(center, _nodeRadius, _outlinePaint);
+      final nodeRadius = _radiusOf(node.id);
+      canvas.drawCircle(center, nodeRadius, _surfacePaint);
+      canvas.drawCircle(center, nodeRadius, _outlinePaint);
 
       final label = _labels[node.id]!;
       label.paint(
         canvas,
-        Offset(center.dx - label.width / 2, center.dy + _nodeRadius + 3),
+        Offset(center.dx - label.width / 2, center.dy + nodeRadius + 3),
       );
     }
 
@@ -991,16 +993,31 @@ class _ForceGraphPainter extends CustomPainter {
     )..layout(maxWidth: 96);
   }
 
-  void _paintDirectedEdge(Canvas canvas, Offset source, Offset target) {
+  double _radiusOf(String nodeId) => NoteverseGraphStyle.nodeRadiusFor(
+    layout.graph.neighborCountsByNodeId[nodeId]!,
+    baseRadius: NoteverseGraphStyle.layoutNodeRadius,
+  );
+
+  void _paintDirectedEdge(
+    Canvas canvas,
+    Offset source,
+    Offset target,
+    double sourceRadius,
+    double targetRadius,
+  ) {
     final delta = target - source;
     final distance = delta.distance;
-    if (distance <= _nodeRadius * 2) {
+    if (distance <= sourceRadius + targetRadius) {
       return;
     }
     final direction = delta / distance;
-    final start = source + direction * _nodeRadius;
-    final tip = target - direction * _nodeRadius;
-    final base = tip - direction * _arrowLength;
+    final start = source + direction * sourceRadius;
+    final tip = target - direction * targetRadius;
+    final arrowLength = math.min(
+      _arrowLength,
+      (distance - sourceRadius - targetRadius) / 2,
+    );
+    final base = tip - direction * arrowLength;
     final perpendicular = Offset(-direction.dy, direction.dx);
 
     canvas.drawLine(start, base, _edgePaint);

@@ -15,7 +15,8 @@ class GraphData {
          for (final node in nodes) node.cell: node.id,
        }),
        outgoingEdgesByNodeId = _indexEdges(nodes, edges, outgoing: true),
-       incomingEdgesByNodeId = _indexEdges(nodes, edges, outgoing: false);
+       incomingEdgesByNodeId = _indexEdges(nodes, edges, outgoing: false),
+       neighborCountsByNodeId = _countNeighbors(nodes, edges);
 
   /// Creates and validates a positioned graph.
   factory GraphData({
@@ -79,12 +80,28 @@ class GraphData {
   /// Directed edges keyed by their target node identifier.
   final Map<String, List<GraphEdge>> incomingEdgesByNodeId;
 
+  /// Distinct neighbors across incoming and outgoing edges.
+  ///
+  /// Reciprocal directed links to the same note count as one neighbor.
+  final Map<String, int> neighborCountsByNodeId;
+
   /// Converts this graph to its backend JSON representation.
   Map<String, Object> toJson() => {
     'graphId': graphId,
     'nodes': nodes.map((node) => node.toJson()).toList(growable: false),
     'edges': edges.map((edge) => edge.toJson()).toList(growable: false),
   };
+}
+
+Map<String, int> _countNeighbors(List<GraphNode> nodes, List<GraphEdge> edges) {
+  final neighbors = {for (final node in nodes) node.id: <String>{}};
+  for (final edge in edges) {
+    neighbors[edge.sourceNodeId]!.add(edge.targetNodeId);
+    neighbors[edge.targetNodeId]!.add(edge.sourceNodeId);
+  }
+  return Map.unmodifiable({
+    for (final entry in neighbors.entries) entry.key: entry.value.length,
+  });
 }
 
 void _validate(List<GraphNode> nodes, List<GraphEdge> edges) {

@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 
 import '../../hex_coordinate.dart';
 import '../../hex_grid_geometry.dart';
+import '../../theme/noteverse_graph_style.dart';
 import '../models/graph_data.dart';
 import '../models/graph_node.dart';
 import 'hex_layout_snapper.dart';
@@ -230,11 +231,14 @@ class ForceGraphLayout extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Finds the topmost visible node within [maximumDistance].
-  String? hitTestNode(Offset position, double maximumDistance) {
+  /// Finds the topmost visible node using a uniform invisible hit target.
+  String? hitTestNode(Offset position) {
+    final radius = NoteverseGraphStyle.nodeHitRadius(
+      baseRadius: NoteverseGraphStyle.layoutNodeRadius,
+    );
     for (var index = _visibleNodeCount - 1; index >= 0; index--) {
       final nodeId = graph.nodes[index].id;
-      if ((_positions[nodeId]! - position).distance <= maximumDistance) {
+      if ((_positions[nodeId]! - position).distance <= radius) {
         return nodeId;
       }
     }
@@ -255,6 +259,7 @@ class ForceGraphLayout extends ChangeNotifier {
               title: node.title,
               sourcePath: node.sourcePath,
               cell: _snappedCells[node.id]!,
+              markdownContent: node.markdownContent,
             ),
           )
           .toList(growable: false),

@@ -5,14 +5,17 @@ import 'package:flutter/material.dart';
 import 'canvas_camera.dart';
 import 'graph/models/graph_data.dart';
 import 'graph/models/graph_node.dart';
+import 'graph/interaction/graph_hover_controller.dart';
 import 'hex_grid_geometry.dart';
 import 'hex_grid_lines.dart';
 import 'theme/noteverse_typography.dart';
+import 'theme/noteverse_graph_style.dart';
 
 /// Paints only the flat-top hexagons intersecting the current viewport.
 class HexGridPainter extends CustomPainter {
   HexGridPainter({
     required this.camera,
+    required this.hover,
     required this.geometry,
     required this.graph,
     required this.backgroundColor,
@@ -23,6 +26,9 @@ class HexGridPainter extends CustomPainter {
     required this.nodeOutlineColor,
     required this.nodeLabelColor,
     required this.edgeColor,
+    required this.nodeHoverColor,
+    required this.shadowColor,
+    required this.selectedNodeId,
   }) : _backgroundPaint = Paint()..color = backgroundColor,
        _gridPaint = Paint()
          ..color = gridColor
@@ -37,9 +43,10 @@ class HexGridPainter extends CustomPainter {
          ..color = edgeColor
          ..strokeCap = StrokeCap.round,
        _arrowPaint = Paint()..color = edgeColor,
-       super(repaint: camera);
+       super(repaint: Listenable.merge([camera, hover]));
 
   final CanvasCamera camera;
+  final GraphHoverController hover;
   final HexGridGeometry geometry;
   final GraphData graph;
   final Color backgroundColor;
@@ -50,6 +57,9 @@ class HexGridPainter extends CustomPainter {
   final Color nodeOutlineColor;
   final Color nodeLabelColor;
   final Color edgeColor;
+  final Color nodeHoverColor;
+  final Color shadowColor;
+  final String? selectedNodeId;
   final Paint _backgroundPaint;
   final Paint _gridPaint;
   final Paint _originPaint;
@@ -59,7 +69,6 @@ class HexGridPainter extends CustomPainter {
   final Paint _arrowPaint;
 
   static const _originRadius = 3.0;
-  static const _nodeRadius = 11.0;
   static const _nodeOutlineWidth = 1.25;
   static const _edgeWidth = 1.25;
   static const _arrowLength = 7.0;
@@ -100,7 +109,10 @@ class HexGridPainter extends CustomPainter {
     double originY,
     double scale,
   ) {
-    final nodeRadius = _nodeRadius * scale;
+    final maximumNodeRadius =
+        NoteverseGraphStyle.mainNodeRadius *
+        NoteverseGraphStyle.maximumNodeScale *
+        scale;
     final nodeCenters = <String, Offset>{
       for (final node in graph.nodes)
         node.id: _screenCenter(node, originX, originY, scale),
@@ -110,18 +122,49 @@ class HexGridPainter extends CustomPainter {
     for (final edge in graph.edges) {
       final source = nodeCenters[edge.sourceNodeId]!;
       final target = nodeCenters[edge.targetNodeId]!;
-      if (!_segmentIntersectsViewport(source, target, size, nodeRadius)) {
+      if (!_segmentIntersectsViewport(
+        source,
+        target,
+        size,
+        maximumNodeRadius,
+      )) {
         continue;
       }
-      _paintDirectedEdge(canvas, source, target, nodeRadius, scale);
+      _paintDirectedEdge(
+        canvas,
+        source,
+        target,
+        _radiusOf(edge.sourceNodeId) * scale,
+        _radiusOf(edge.targetNodeId) * scale,
+        scale,
+      );
     }
 
     _nodeOutlinePaint.strokeWidth = (_nodeOutlineWidth * scale).clamp(0.75, 3);
     for (final node in graph.nodes) {
       final center = nodeCenters[node.id]!;
+      final nodeRadius = _radiusOf(node.id) * scale;
       if (!_circleIntersectsViewport(center, nodeRadius, size)) {
         continue;
       }
+      final amount = hover.amountFor(node.id);
+      if (amount > 0) {
+        final baseCenter =
+            center + Offset(0, NoteverseGraphStyle.hoverLift * amount);
+        canvas.drawOval(
+          Rect.fromCenter(
+            center: baseCenter,
+            width: nodeRadius * 2,
+            height: nodeRadius * 1.1,
+          ),
+          Paint()
+            ..color = shadowColor.withValues(alpha: 0.45 * amount)
+            ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3),
+        );
+      }
+      _nodeSurfacePaint.color = node.id == selectedNodeId
+          ? nodeHoverColor
+          : Color.lerp(nodeSurfaceColor, nodeHoverColor, amount)!;
       canvas.drawCircle(center, nodeRadius, _nodeSurfacePaint);
       canvas.drawCircle(center, nodeRadius, _nodeOutlinePaint);
       if (scale >= _minimumLabelScale) {
@@ -129,6 +172,11 @@ class HexGridPainter extends CustomPainter {
       }
     }
   }
+
+  double _radiusOf(String nodeId) => NoteverseGraphStyle.nodeRadiusFor(
+    graph.neighborCountsByNodeId[nodeId]!,
+    baseRadius: NoteverseGraphStyle.mainNodeRadius,
+  );
 
   Offset _screenCenter(
     GraphNode node,
@@ -139,7 +187,9 @@ class HexGridPainter extends CustomPainter {
     final worldCenter = geometry.centerOf(node.cell);
     return Offset(
       originX + worldCenter.dx * scale,
-      originY - worldCenter.dy * scale,
+      originY -
+          worldCenter.dy * scale -
+          NoteverseGraphStyle.hoverLift * hover.amountFor(node.id),
     );
   }
 
@@ -147,19 +197,23 @@ class HexGridPainter extends CustomPainter {
     Canvas canvas,
     Offset source,
     Offset target,
-    double nodeRadius,
+    double sourceRadius,
+    double targetRadius,
     double scale,
   ) {
     final delta = target - source;
     final distance = delta.distance;
-    if (distance <= nodeRadius * 2) {
+    if (distance <= sourceRadius + targetRadius) {
       return;
     }
 
     final direction = delta / distance;
-    final start = source + direction * nodeRadius;
-    final tip = target - direction * nodeRadius;
-    final arrowLength = _arrowLength * scale;
+    final start = source + direction * sourceRadius;
+    final tip = target - direction * targetRadius;
+    final arrowLength = math.min(
+      _arrowLength * scale,
+      (distance - sourceRadius - targetRadius) / 2,
+    );
     final arrowHalfWidth = _arrowHalfWidth * scale;
     final arrowBase = tip - direction * arrowLength;
     final perpendicular = Offset(-direction.dy, direction.dx);
@@ -236,6 +290,7 @@ class HexGridPainter extends CustomPainter {
   @override
   bool shouldRepaint(HexGridPainter oldDelegate) =>
       oldDelegate.camera != camera ||
+      oldDelegate.hover != hover ||
       oldDelegate.geometry.radius != geometry.radius ||
       oldDelegate.graph != graph ||
       oldDelegate.backgroundColor != backgroundColor ||
@@ -245,5 +300,8 @@ class HexGridPainter extends CustomPainter {
       oldDelegate.nodeSurfaceColor != nodeSurfaceColor ||
       oldDelegate.nodeOutlineColor != nodeOutlineColor ||
       oldDelegate.nodeLabelColor != nodeLabelColor ||
-      oldDelegate.edgeColor != edgeColor;
+      oldDelegate.edgeColor != edgeColor ||
+      oldDelegate.nodeHoverColor != nodeHoverColor ||
+      oldDelegate.shadowColor != shadowColor ||
+      oldDelegate.selectedNodeId != selectedNodeId;
 }
