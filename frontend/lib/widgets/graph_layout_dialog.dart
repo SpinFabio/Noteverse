@@ -12,6 +12,7 @@ import '../theme/noteverse_colors.dart';
 import '../theme/noteverse_graph_style.dart';
 import '../theme/noteverse_typography.dart';
 import 'canvas_navigation_controls.dart';
+import 'canvas_mouse_region.dart';
 
 /// Opens the temporary force-directed graph arrangement workspace.
 Future<GraphData?> showGraphLayoutDialog({
@@ -58,6 +59,7 @@ class _GraphLayoutDialogState extends State<GraphLayoutDialog>
   double _viewScale = 1;
   Offset _viewTranslation = Offset.zero;
   bool _isPanning = false;
+  int _interactionButtons = 0;
 
   static const _minimumViewScale = 0.25;
   static const _maximumViewScale = 4.0;
@@ -168,14 +170,17 @@ class _GraphLayoutDialogState extends State<GraphLayoutDialog>
   }
 
   void _startInteraction(DragStartDetails details, Size size) {
+    if (_interactionButtons == kSecondaryButton) {
+      _isPanning = true;
+      setState(() {});
+      return;
+    }
     final layoutPosition = _layoutPositionFromScreen(
       details.localPosition,
       size,
     );
     final nodeId = _layout.hitTestNode(layoutPosition);
     if (nodeId == null) {
-      _isPanning = true;
-      setState(() {});
       return;
     }
     _draggedNodeId = nodeId;
@@ -358,22 +363,43 @@ class _GraphLayoutDialogState extends State<GraphLayoutDialog>
           child: Stack(
             fit: StackFit.expand,
             children: [
-              MouseRegion(
+              CanvasMouseRegion(
                 cursor: _draggedNodeId == null && !_isPanning
                     ? SystemMouseCursors.grab
                     : SystemMouseCursors.grabbing,
                 child: Listener(
+                  onPointerDown: (event) {
+                    if (!_isPanning && _draggedNodeId == null) {
+                      _interactionButtons = event.buttons;
+                    }
+                  },
                   onPointerSignal: (event) {
                     if (event is PointerScrollEvent) {
                       _zoomWithWheel(event, size);
                     }
                   },
-                  child: GestureDetector(
+                  child: RawGestureDetector(
                     behavior: HitTestBehavior.opaque,
-                    onPanStart: (details) => _startInteraction(details, size),
-                    onPanUpdate: (details) => _updateInteraction(details, size),
-                    onPanEnd: (_) => _endInteraction(),
-                    onPanCancel: _endInteraction,
+                    gestures: {
+                      PanGestureRecognizer:
+                          GestureRecognizerFactoryWithHandlers<
+                            PanGestureRecognizer
+                          >(
+                            () => PanGestureRecognizer(
+                              allowedButtonsFilter: (buttons) =>
+                                  buttons == kPrimaryButton ||
+                                  buttons == kSecondaryButton,
+                            ),
+                            (recognizer) {
+                              recognizer.onStart = (details) =>
+                                  _startInteraction(details, size);
+                              recognizer.onUpdate = (details) =>
+                                  _updateInteraction(details, size);
+                              recognizer.onEnd = (_) => _endInteraction();
+                              recognizer.onCancel = _endInteraction;
+                            },
+                          ),
+                    },
                     child: RepaintBoundary(
                       child: CustomPaint(
                         painter: _ForceGraphPainter(

@@ -87,7 +87,6 @@ class ForceGraphLayout extends ChangeNotifier {
   GraphLayoutMode get mode => _mode;
   bool get isRunning => _isRunning;
   bool get isSpawning => _visibleNodeCount < graph.nodes.length;
-  int get visibleNodeCount => _visibleNodeCount;
   bool get canSnap =>
       _mode == GraphLayoutMode.forces && !isSpawning && _draggedNodeId == null;
   bool get canApply => _mode == GraphLayoutMode.hexGrid;

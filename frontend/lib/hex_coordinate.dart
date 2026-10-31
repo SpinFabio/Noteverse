@@ -1,7 +1,7 @@
 /// Integer axial coordinates for one cell in the infinite hexagonal grid.
 ///
-/// The equivalent third cube coordinate is derived so the invariant
-/// `q + r + s == 0` is always preserved.
+/// Stores the two independent axes; the equivalent cube coordinate is
+/// `s = -q - r`.
 class HexCoordinate {
   const HexCoordinate(this.q, this.r);
 
@@ -22,9 +22,6 @@ class HexCoordinate {
 
   /// Vertical flat-top grid axis.
   final int r;
-
-  /// Derived third coordinate used by symmetric hex-grid algorithms.
-  int get s => -q - r;
 
   /// Converts this coordinate to its JSON representation.
   Map<String, int> toJson() => {'q': q, 'r': r};

@@ -9,16 +9,19 @@ import 'canvas_camera.dart';
 import 'data/settings/graph_view_settings_store.dart';
 import 'graph/data/graph_asset_loader.dart';
 import 'graph/interaction/graph_hover_controller.dart';
+import 'graph/interaction/graph_node_motion.dart';
 import 'graph/models/graph_data.dart';
 import 'graph/models/graph_node.dart';
 import 'graph/models/graph_view_mode.dart';
 import 'hex_grid_geometry.dart';
+import 'hex_coordinate.dart';
 import 'hex_grid_painter.dart';
 import 'settings/graph_view_settings.dart';
 import 'theme/noteverse_colors.dart';
 import 'theme/noteverse_graph_style.dart';
 import 'theme/noteverse_theme.dart';
 import 'widgets/canvas_controls.dart';
+import 'widgets/canvas_mouse_region.dart';
 import 'widgets/canvas_navigation_controls.dart';
 import 'widgets/graph_layout_dialog.dart';
 import 'widgets/graph_view_settings_dialog.dart';
@@ -85,20 +88,31 @@ class InfiniteCanvasPage extends StatefulWidget {
 }
 
 class _InfiniteCanvasPageState extends State<InfiniteCanvasPage>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
   static const _geometry = HexGridGeometry(radius: 40);
 
   final CanvasCamera _camera = CanvasCamera(minScale: 1 / 3, maxScale: 4);
   late final GraphHoverController _hover = GraphHoverController(vsync: this);
+  late final GraphNodeMotion _nodeMotion = GraphNodeMotion(vsync: this);
   Offset? _pointerPosition;
   Size? _pointerViewportSize;
   bool _isDragging = false;
+  int _gestureButtons = 0;
+  String? _pressedNodeId;
+  Offset? _pressWorldPosition;
+  Offset? _pressScreenPosition;
+  bool _pressStartsBoxSelection = false;
+  Rect? _selectionRect;
+  Size? _selectionViewportSize;
+  bool _draggingNodes = false;
+  Map<String, HexCoordinate> _dragCells = const {};
+  bool _dragDestinationValid = true;
   late GraphViewSettings _settings = widget.initialSettings;
   late GraphData _graph = widget.graph;
   GraphViewMode _viewMode = GraphViewMode.navigate;
   String? _lastViewedNodeId;
   String? _displayedNodeId;
-  String? _editSelectedNodeId;
+  Set<String> _editSelectedNodeIds = const {};
   bool _previewOpen = false;
   bool _previewExiting = false;
   String? _lastEditTapNodeId;
@@ -195,6 +209,28 @@ class _InfiniteCanvasPageState extends State<InfiniteCanvasPage>
 
   void _startGesture(ScaleStartDetails details, Size viewportSize) {
     _isDragging = true;
+    if (_viewMode == GraphViewMode.edit &&
+        _gestureButtons == kPrimaryButton &&
+        details.pointerCount == 1 &&
+        _pressStartsBoxSelection) {
+      setState(() {
+        _selectionRect = Rect.fromPoints(
+          _pressScreenPosition!,
+          details.localFocalPoint,
+        );
+        _selectionViewportSize = viewportSize;
+      });
+    }
+    _draggingNodes =
+        _viewMode == GraphViewMode.edit &&
+        _gestureButtons == kPrimaryButton &&
+        details.pointerCount == 1 &&
+        _pressedNodeId != null &&
+        _editSelectedNodeIds.contains(_pressedNodeId);
+    if (_draggingNodes) {
+      _nodeMotion.finish();
+    }
+    _lastEditTapNodeId = null;
     _setHoveredNode(null);
     _gestureStartScale = _camera.scale;
     _gestureAnchorWorld = _camera.worldFromScreen(
@@ -205,15 +241,137 @@ class _InfiniteCanvasPageState extends State<InfiniteCanvasPage>
 
   void _updateGesture(ScaleUpdateDetails details, Size viewportSize) {
     _pointerPosition = details.localFocalPoint;
-    _camera.focusOn(
-      anchorWorld: _gestureAnchorWorld,
-      focalPoint: details.localFocalPoint,
-      viewportSize: viewportSize,
-      requestedScale: _gestureStartScale * details.scale,
-    );
+    if (_selectionRect != null) {
+      setState(() {
+        _selectionRect = Rect.fromPoints(
+          _pressScreenPosition!,
+          details.localFocalPoint,
+        );
+      });
+      return;
+    }
+    if (_draggingNodes) {
+      final position = _camera.worldFromScreen(
+        details.localFocalPoint,
+        viewportSize,
+      );
+      final displacement = position - _pressWorldPosition!;
+      _nodeMotion.follow({
+        for (final id in _editSelectedNodeIds)
+          id: _geometry.centerOf(_graph.nodesById[id]!.cell) + displacement,
+      });
+      // Round the displacement, not the pointer's absolute cell, so grabbing
+      // anywhere inside a selected hexagon preserves the group's arrangement.
+      final delta = _geometry.coordinateAt(displacement);
+      final cells = {
+        for (final id in _editSelectedNodeIds)
+          id: HexCoordinate(
+            _graph.nodesById[id]!.cell.q + delta.q,
+            _graph.nodesById[id]!.cell.r + delta.r,
+          ),
+      };
+      if (_dragCells.isNotEmpty &&
+          _dragCells[_pressedNodeId] == cells[_pressedNodeId]) {
+        return;
+      }
+      final valid = cells.values.every((cell) {
+        final occupant = _graph.nodeIdByCell[cell];
+        return occupant == null || _editSelectedNodeIds.contains(occupant);
+      });
+      setState(() {
+        _dragCells = cells;
+        _dragDestinationValid = valid;
+      });
+      return;
+    }
+    if (_gestureButtons == kSecondaryButton) {
+      _camera.focusOn(
+        anchorWorld: _gestureAnchorWorld,
+        focalPoint: details.localFocalPoint,
+        viewportSize: viewportSize,
+        requestedScale: _gestureStartScale * details.scale,
+      );
+    }
+  }
+
+  /// Commits a box selection or group translation, unless cancelled.
+  void _endGesture({bool cancelled = false}) {
+    final movingNodeIds = _draggingNodes
+        ? _nodeMotion.positions.keys.toList(growable: false)
+        : const <String>[];
+    setState(() {
+      final selectionRect = _selectionRect;
+      if (!cancelled && selectionRect != null) {
+        final worldBounds = Rect.fromPoints(
+          _camera.worldFromScreen(
+            selectionRect.topLeft,
+            _selectionViewportSize!,
+          ),
+          _camera.worldFromScreen(
+            selectionRect.bottomRight,
+            _selectionViewportSize!,
+          ),
+        );
+        // Test the cell centers in world space, independently of zoom, hover
+        // elevation, and node size. Include centers on the rectangle's edges.
+        _editSelectedNodeIds = {
+          ..._editSelectedNodeIds,
+          for (final node in _graph.nodes)
+            if (_geometry.centerOf(node.cell) case final center
+                when center.dx >= worldBounds.left &&
+                    center.dx <= worldBounds.right &&
+                    center.dy >= worldBounds.top &&
+                    center.dy <= worldBounds.bottom)
+              node.id,
+        };
+      }
+      if (_draggingNodes &&
+          !cancelled &&
+          _dragDestinationValid &&
+          _dragCells.isNotEmpty) {
+        _graph = GraphData(
+          graphId: _graph.graphId,
+          nodes: [
+            for (final node in _graph.nodes)
+              if (_dragCells[node.id] case final cell?)
+                GraphNode(
+                  id: node.id,
+                  title: node.title,
+                  sourcePath: node.sourcePath,
+                  cell: cell,
+                  markdownContent: node.markdownContent,
+                )
+              else
+                node,
+          ],
+          edges: _graph.edges,
+        );
+      }
+      _dragCells = const {};
+      _dragDestinationValid = true;
+      _draggingNodes = false;
+      _isDragging = false;
+      _gestureButtons = 0;
+      _pressedNodeId = null;
+      _pressWorldPosition = null;
+      _pressScreenPosition = null;
+      _pressStartsBoxSelection = false;
+      _selectionRect = null;
+      _selectionViewportSize = null;
+    });
+    if (movingNodeIds.isNotEmpty) {
+      _nodeMotion.settle({
+        for (final id in movingNodeIds)
+          id: _geometry.centerOf(_graph.nodesById[id]!.cell),
+      }, animate: !MediaQuery.disableAnimationsOf(context));
+    }
+    _refreshHover();
   }
 
   void _zoomWithWheel(PointerScrollEvent event, Size viewportSize) {
+    if (_draggingNodes || _selectionRect != null) {
+      return;
+    }
     final anchorWorld = _camera.worldFromScreen(
       event.localPosition,
       viewportSize,
@@ -248,7 +406,7 @@ class _InfiniteCanvasPageState extends State<InfiniteCanvasPage>
   void _showNodePreview(String nodeId) {
     setState(() {
       if (_viewMode == GraphViewMode.edit) {
-        _editSelectedNodeId = nodeId;
+        _editSelectedNodeIds = {nodeId};
       }
       _lastViewedNodeId = nodeId;
       final shouldTransition =
@@ -266,16 +424,32 @@ class _InfiniteCanvasPageState extends State<InfiniteCanvasPage>
   /// Responds to each completed edit tap without waiting for a double-tap timeout.
   void _handleEditTap(SerialTapUpDetails details, Size viewportSize) {
     final nodeId = _nodeAt(details.localPosition, viewportSize);
+    if (HardwareKeyboard.instance.isControlPressed) {
+      // Modified clicks toggle selection and never open a note on a double tap.
+      _lastEditTapNodeId = null;
+      if (nodeId != null) {
+        final selected = {..._editSelectedNodeIds};
+        if (!selected.remove(nodeId)) {
+          selected.add(nodeId);
+        }
+        setState(() => _editSelectedNodeIds = selected);
+      }
+      return;
+    }
     final opensNote =
         details.count.isEven && nodeId != null && nodeId == _lastEditTapNodeId;
     _lastEditTapNodeId = nodeId;
     if (nodeId == null) {
+      if (_editSelectedNodeIds.isNotEmpty) {
+        setState(() => _editSelectedNodeIds = const {});
+      }
       return;
     }
     if (opensNote) {
       _showNodePreview(nodeId);
-    } else if (_editSelectedNodeId != nodeId) {
-      setState(() => _editSelectedNodeId = nodeId);
+    } else if (_editSelectedNodeIds.length != 1 ||
+        !_editSelectedNodeIds.contains(nodeId)) {
+      setState(() => _editSelectedNodeIds = {nodeId});
     }
   }
 
@@ -344,6 +518,7 @@ class _InfiniteCanvasPageState extends State<InfiniteCanvasPage>
   @override
   void dispose() {
     _camera.removeListener(_refreshHover);
+    _nodeMotion.dispose();
     _hover.dispose();
     _camera.dispose();
     super.dispose();
@@ -373,10 +548,11 @@ class _InfiniteCanvasPageState extends State<InfiniteCanvasPage>
               LayoutBuilder(
                 builder: (context, constraints) {
                   final viewportSize = constraints.biggest;
-                  return MouseRegion(
-                    cursor:
-                        _hover.hoveredNodeId != null &&
-                            _viewMode != GraphViewMode.navigate
+                  return CanvasMouseRegion(
+                    cursor: _selectionRect != null
+                        ? SystemMouseCursors.precise
+                        : _hover.hoveredNodeId != null &&
+                              _viewMode != GraphViewMode.navigate
                         ? SystemMouseCursors.click
                         : SystemMouseCursors.grab,
                     onEnter: (event) =>
@@ -388,6 +564,27 @@ class _InfiniteCanvasPageState extends State<InfiniteCanvasPage>
                       _setHoveredNode(null);
                     },
                     child: Listener(
+                      onPointerDown: (event) {
+                        if (!_isDragging) {
+                          _gestureButtons = event.buttons;
+                        }
+                        if (!_isDragging && event.buttons == kPrimaryButton) {
+                          _pressedNodeId = _nodeAt(
+                            event.localPosition,
+                            viewportSize,
+                          );
+                          _pressWorldPosition = _camera.worldFromScreen(
+                            event.localPosition,
+                            viewportSize,
+                          );
+                          _pressScreenPosition = event.localPosition;
+                          _pressStartsBoxSelection =
+                              _viewMode == GraphViewMode.edit &&
+                              _pressedNodeId == null &&
+                              HardwareKeyboard.instance.isControlPressed;
+                        }
+                      },
+                      onPointerCancel: (_) => _endGesture(cancelled: true),
                       onPointerSignal: (event) {
                         if (event is PointerScrollEvent) {
                           _zoomWithWheel(event, viewportSize);
@@ -396,6 +593,24 @@ class _InfiniteCanvasPageState extends State<InfiniteCanvasPage>
                       child: RawGestureDetector(
                         behavior: HitTestBehavior.opaque,
                         gestures: {
+                          ScaleGestureRecognizer:
+                              GestureRecognizerFactoryWithHandlers<
+                                ScaleGestureRecognizer
+                              >(
+                                () => ScaleGestureRecognizer(
+                                  allowedButtonsFilter: (buttons) =>
+                                      buttons == kSecondaryButton ||
+                                      (buttons == kPrimaryButton &&
+                                          _viewMode == GraphViewMode.edit),
+                                ),
+                                (recognizer) {
+                                  recognizer.onStart = (details) =>
+                                      _startGesture(details, viewportSize);
+                                  recognizer.onUpdate = (details) =>
+                                      _updateGesture(details, viewportSize);
+                                  recognizer.onEnd = (_) => _endGesture();
+                                },
+                              ),
                           if (_viewMode == GraphViewMode.edit)
                             SerialTapGestureRecognizer:
                                 GestureRecognizerFactoryWithHandlers<
@@ -419,14 +634,6 @@ class _InfiniteCanvasPageState extends State<InfiniteCanvasPage>
                                   viewportSize,
                                 )
                               : null,
-                          onScaleStart: (details) =>
-                              _startGesture(details, viewportSize),
-                          onScaleUpdate: (details) =>
-                              _updateGesture(details, viewportSize),
-                          onScaleEnd: (_) {
-                            _isDragging = false;
-                            _refreshHover();
-                          },
                           child: RepaintBoundary(
                             child: Semantics(
                               label: 'Infinite hexagonal graph plane',
@@ -434,8 +641,15 @@ class _InfiniteCanvasPageState extends State<InfiniteCanvasPage>
                                 painter: HexGridPainter(
                                   camera: _camera,
                                   hover: _hover,
+                                  nodeMotion: _nodeMotion,
                                   geometry: _geometry,
                                   graph: _graph,
+                                  selectionRect: _selectionRect,
+                                  previewCells: _dragCells,
+                                  invalidPreview: !_dragDestinationValid,
+                                  invalidNodeColor: Theme.of(
+                                    context,
+                                  ).colorScheme.error,
                                   backgroundColor: _settings.backgroundColor,
                                   gridColor: colors.graphGridLines,
                                   gridLineWidth:
@@ -451,12 +665,14 @@ class _InfiniteCanvasPageState extends State<InfiniteCanvasPage>
                                   shadowColor: Theme.of(
                                     context,
                                   ).colorScheme.shadow,
-                                  selectedNodeId:
+                                  selectedNodeIds:
                                       _viewMode == GraphViewMode.edit
-                                      ? _editSelectedNodeId
-                                      : (_previewOpen
-                                            ? _lastViewedNodeId
-                                            : null),
+                                      ? _editSelectedNodeIds
+                                      : {
+                                          if (_previewOpen &&
+                                              _lastViewedNodeId != null)
+                                            _lastViewedNodeId!,
+                                        },
                                 ),
                                 size: viewportSize,
                               ),

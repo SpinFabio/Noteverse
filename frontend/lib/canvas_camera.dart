@@ -31,15 +31,6 @@ class CanvasCamera extends ChangeNotifier {
     );
   }
 
-  /// Converts Cartesian world coordinates into a position in the viewport.
-  Offset screenFromWorld(Offset worldPosition, Size viewportSize) {
-    final screenOrigin = viewportSize.center(Offset.zero) + _translation;
-    return Offset(
-      screenOrigin.dx + worldPosition.dx * _scale,
-      screenOrigin.dy - worldPosition.dy * _scale,
-    );
-  }
-
   /// Updates the view while keeping [anchorWorld] under [focalPoint].
   void focusOn({
     required Offset anchorWorld,

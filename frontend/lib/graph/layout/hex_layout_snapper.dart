@@ -142,7 +142,7 @@ abstract final class HexLayoutSnapper {
   static HexCoordinate _roundAxial(double qValue, double rValue) {
     var q = qValue.round();
     var r = rValue.round();
-    var s = (-qValue - rValue).round();
+    final s = (-qValue - rValue).round();
     final qDifference = (q - qValue).abs();
     final rDifference = (r - rValue).abs();
     final sDifference = (s + qValue + rValue).abs();
@@ -151,8 +151,6 @@ abstract final class HexLayoutSnapper {
       q = -r - s;
     } else if (rDifference > sDifference) {
       r = -q - s;
-    } else {
-      s = -q - r;
     }
     return HexCoordinate(q, r);
   }

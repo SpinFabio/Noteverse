@@ -1,12 +1,15 @@
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import 'canvas_camera.dart';
 import 'graph/models/graph_data.dart';
 import 'graph/models/graph_node.dart';
 import 'graph/interaction/graph_hover_controller.dart';
+import 'graph/interaction/graph_node_motion.dart';
 import 'hex_grid_geometry.dart';
+import 'hex_coordinate.dart';
 import 'hex_grid_lines.dart';
 import 'theme/noteverse_typography.dart';
 import 'theme/noteverse_graph_style.dart';
@@ -16,8 +19,13 @@ class HexGridPainter extends CustomPainter {
   HexGridPainter({
     required this.camera,
     required this.hover,
+    required this.nodeMotion,
     required this.geometry,
     required this.graph,
+    required this.selectionRect,
+    required this.previewCells,
+    required this.invalidPreview,
+    required this.invalidNodeColor,
     required this.backgroundColor,
     required this.gridColor,
     required this.gridLineWidth,
@@ -28,7 +36,7 @@ class HexGridPainter extends CustomPainter {
     required this.edgeColor,
     required this.nodeHoverColor,
     required this.shadowColor,
-    required this.selectedNodeId,
+    required this.selectedNodeIds,
   }) : _backgroundPaint = Paint()..color = backgroundColor,
        _gridPaint = Paint()
          ..color = gridColor
@@ -43,12 +51,21 @@ class HexGridPainter extends CustomPainter {
          ..color = edgeColor
          ..strokeCap = StrokeCap.round,
        _arrowPaint = Paint()..color = edgeColor,
-       super(repaint: Listenable.merge([camera, hover]));
+       super(repaint: Listenable.merge([camera, hover, nodeMotion]));
 
   final CanvasCamera camera;
   final GraphHoverController hover;
+  final GraphNodeMotion nodeMotion;
   final HexGridGeometry geometry;
   final GraphData graph;
+
+  /// Screen-space additive selection rectangle, or null outside a box drag.
+  final Rect? selectionRect;
+
+  /// Ghost destinations only; actual nodes follow [nodeMotion] instead.
+  final Map<String, HexCoordinate> previewCells;
+  final bool invalidPreview;
+  final Color invalidNodeColor;
   final Color backgroundColor;
   final Color gridColor;
   final double gridLineWidth;
@@ -59,7 +76,9 @@ class HexGridPainter extends CustomPainter {
   final Color edgeColor;
   final Color nodeHoverColor;
   final Color shadowColor;
-  final String? selectedNodeId;
+
+  /// Selected node IDs, supplied as a snapshot that must not be mutated.
+  final Set<String> selectedNodeIds;
   final Paint _backgroundPaint;
   final Paint _gridPaint;
   final Paint _originPaint;
@@ -100,6 +119,23 @@ class HexGridPainter extends CustomPainter {
       _originRadius * camera.scale,
       _originPaint,
     );
+
+    if (selectionRect case final rect?) {
+      canvas.save();
+      canvas.clipRect(Offset.zero & size);
+      canvas.drawRect(
+        rect,
+        Paint()..color = nodeHoverColor.withValues(alpha: 0.12),
+      );
+      canvas.drawRect(
+        rect,
+        Paint()
+          ..color = nodeHoverColor
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1,
+      );
+      canvas.restore();
+    }
   }
 
   void _paintGraph(
@@ -140,6 +176,26 @@ class HexGridPainter extends CustomPainter {
       );
     }
 
+    // Ghosts have no edges or labels, and never replace the moving nodes.
+    final ghostColor = invalidPreview ? invalidNodeColor : nodeHoverColor;
+    final ghostFill = Paint()..color = ghostColor.withValues(alpha: 0.18);
+    final ghostOutline = Paint()
+      ..color = ghostColor.withValues(alpha: 0.65)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1;
+    for (final entry in previewCells.entries) {
+      final world = geometry.centerOf(entry.value);
+      final center = Offset(
+        originX + world.dx * scale,
+        originY - world.dy * scale,
+      );
+      final radius = _radiusOf(entry.key) * scale;
+      if (_circleIntersectsViewport(center, radius, size)) {
+        canvas.drawCircle(center, radius, ghostFill);
+        canvas.drawCircle(center, radius, ghostOutline);
+      }
+    }
+
     _nodeOutlinePaint.strokeWidth = (_nodeOutlineWidth * scale).clamp(0.75, 3);
     for (final node in graph.nodes) {
       final center = nodeCenters[node.id]!;
@@ -162,7 +218,7 @@ class HexGridPainter extends CustomPainter {
             ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3),
         );
       }
-      _nodeSurfacePaint.color = node.id == selectedNodeId
+      _nodeSurfacePaint.color = selectedNodeIds.contains(node.id)
           ? nodeHoverColor
           : Color.lerp(nodeSurfaceColor, nodeHoverColor, amount)!;
       canvas.drawCircle(center, nodeRadius, _nodeSurfacePaint);
@@ -184,7 +240,8 @@ class HexGridPainter extends CustomPainter {
     double originY,
     double scale,
   ) {
-    final worldCenter = geometry.centerOf(node.cell);
+    final worldCenter =
+        nodeMotion.positions[node.id] ?? geometry.centerOf(node.cell);
     return Offset(
       originX + worldCenter.dx * scale,
       originY -
@@ -291,8 +348,13 @@ class HexGridPainter extends CustomPainter {
   bool shouldRepaint(HexGridPainter oldDelegate) =>
       oldDelegate.camera != camera ||
       oldDelegate.hover != hover ||
+      oldDelegate.nodeMotion != nodeMotion ||
       oldDelegate.geometry.radius != geometry.radius ||
       oldDelegate.graph != graph ||
+      oldDelegate.selectionRect != selectionRect ||
+      !mapEquals(oldDelegate.previewCells, previewCells) ||
+      oldDelegate.invalidPreview != invalidPreview ||
+      oldDelegate.invalidNodeColor != invalidNodeColor ||
       oldDelegate.backgroundColor != backgroundColor ||
       oldDelegate.gridColor != gridColor ||
       oldDelegate.gridLineWidth != gridLineWidth ||
@@ -303,5 +365,5 @@ class HexGridPainter extends CustomPainter {
       oldDelegate.edgeColor != edgeColor ||
       oldDelegate.nodeHoverColor != nodeHoverColor ||
       oldDelegate.shadowColor != shadowColor ||
-      oldDelegate.selectedNodeId != selectedNodeId;
+      !setEquals(oldDelegate.selectedNodeIds, selectedNodeIds);
 }
